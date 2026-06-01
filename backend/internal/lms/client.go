@@ -27,12 +27,13 @@ type Client struct {
 type PlayerInfo struct {
 	MAC       string
 	Name      string
-	IP        string
-	Model     string
-	Connected bool
-	Power     int
-	Volume    int
-	Mode      string // play, pause, stop
+	IP           string
+	Model        string
+	Connected    bool
+	Power        int
+	Volume       int
+	Mode         string // play, pause, stop
+	CurrentTitle string
 }
 
 // NewClient creates a new LMS CLI client
@@ -206,6 +207,7 @@ func parsePlayerStatus(mac, resp string) PlayerInfo {
 	info.Name = pairs["player_name"]
 	info.IP = pairs["player_ip"]
 	info.Mode = pairs["mode"]
+	info.CurrentTitle = urlDecode(pairs["current_title"])
 	fmt.Sscanf(pairs["power"], "%d", &info.Power)
 	fmt.Sscanf(pairs["mixer volume"], "%d", &info.Volume)
 	info.Connected = pairs["player_connected"] == "1"
@@ -238,15 +240,27 @@ func parsePlayers(resp string) []PlayerInfo {
 	return players
 }
 
+// parseLMSPairs parses LMS CLI response into key/value map.
+// LMS encodes as "key%3Avalue" (key:value URL-encoded) or "key: value" (space-separated).
 func parseLMSPairs(s string) map[string]string {
 	result := make(map[string]string)
-	decoded, _ := url.QueryUnescape(s)
-	parts := strings.Fields(decoded)
-	for i := 0; i+1 < len(parts); i++ {
-		k := strings.TrimSuffix(parts[i], ":")
-		if strings.HasSuffix(parts[i], ":") {
-			result[k] = parts[i+1]
-			i++
+	// Split on spaces — each token is either "key:value" or "key:" with next token as value
+	parts := strings.Fields(s)
+	for i := 0; i < len(parts); i++ {
+		// URL decode each token individually
+		token, _ := url.QueryUnescape(parts[i])
+		if idx := strings.Index(token, ":"); idx > 0 {
+			key := token[:idx]
+			val := token[idx+1:]
+			if val == "" && i+1 < len(parts) {
+				// "key:" — take next token as value only if it's not itself a key
+				next, _ := url.QueryUnescape(parts[i+1])
+				if !strings.Contains(next, ":") {
+					val = next
+					i++
+				}
+			}
+			result[key] = val
 		}
 	}
 	return result

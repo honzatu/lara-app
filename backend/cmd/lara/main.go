@@ -38,6 +38,7 @@ func main() {
 	api.HandleFunc("/devices", handleCreateDevice).Methods("POST")
 	api.HandleFunc("/devices/{id}", handleGetDevice).Methods("GET")
 	api.HandleFunc("/devices/{id}/status", handleDeviceStatus).Methods("GET")
+	api.HandleFunc("/devices/{id}/play", handlePlay).Methods("POST")
 	api.HandleFunc("/devices/{id}/play-radio", handlePlayRadio).Methods("POST")
 	api.HandleFunc("/devices/{id}/stop", handleStop).Methods("POST")
 	api.HandleFunc("/devices/{id}/volume", handleVolume).Methods("POST")

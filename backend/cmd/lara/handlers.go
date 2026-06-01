@@ -34,6 +34,25 @@ func lara(ip string) *protocol.Client {
 	return protocol.NewClient(ip, os.Getenv("LARA_PASS"))
 }
 
+// handlePlay resumes playback (LMS play command)
+func handlePlay(w http.ResponseWriter, r *http.Request) {
+	d, ok := store.DeviceByID(mux.Vars(r)["id"])
+	if !ok {
+		jsonErr(w, 404, "not found")
+		return
+	}
+	if d.MAC != "" {
+		c := lmsClient()
+		if err := c.Connect(); err == nil {
+			defer c.Close()
+			c.Play(d.MAC)
+		}
+	} else {
+		lara(d.IP).Play()
+	}
+	jsonOK(w, map[string]string{"status": "playing"})
+}
+
 func handleGetDevices(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, store.AllDevices())
 }
@@ -72,6 +91,24 @@ func handleDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 404, "not found")
 		return
 	}
+	// Use LMS status when device has MAC — more accurate for Audio Zone mode
+	if d.MAC != "" {
+		c := lmsClient()
+		if err := c.Connect(); err == nil {
+			defer c.Close()
+			info, err := c.GetStatus(d.MAC)
+			if err == nil {
+				jsonOK(w, map[string]any{
+					"playing":       info.Mode == "play",
+					"volume":        info.Volume,
+					"station_index": 0,
+					"track_title":   info.CurrentTitle,
+				})
+				return
+			}
+		}
+	}
+	// Fallback: binary protocol status
 	status, err := lara(d.IP).GetStatus()
 	if err != nil {
 		jsonErr(w, 502, err.Error())
@@ -81,6 +118,7 @@ func handleDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		"playing":       status.Playing,
 		"volume":        status.Volume,
 		"station_index": status.StationIndex,
+		"track_title":   "",
 	})
 }
 
