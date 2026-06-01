@@ -13,8 +13,11 @@ import (
 )
 
 func main() {
-	// Load .env if present
 	_ = godotenv.Load()
+
+	if err := initStore(); err != nil {
+		log.Fatalf("[LARA] DB init failed: %v", err)
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
