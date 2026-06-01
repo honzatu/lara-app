@@ -34,23 +34,25 @@ func lara(ip string) *protocol.Client {
 	return protocol.NewClient(ip, os.Getenv("LARA_PASS"))
 }
 
-// handlePlay resumes playback (LMS play command)
+// handlePlay resumes or starts last known stream
 func handlePlay(w http.ResponseWriter, r *http.Request) {
-	d, ok := store.DeviceByID(mux.Vars(r)["id"])
+	id := mux.Vars(r)["id"]
+	d, ok := store.DeviceByID(id)
 	if !ok {
 		jsonErr(w, 404, "not found")
 		return
 	}
+	url, name := store.GetLastStream(id)
 	if d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()
-			c.Play(d.MAC)
+			c.PlayURL(d.MAC, url)
 		}
 	} else {
-		lara(d.IP).Play()
+		lara(d.IP).LaraPlayStream(url, name)
 	}
-	jsonOK(w, map[string]string{"status": "playing"})
+	jsonOK(w, map[string]string{"status": "playing", "url": url, "name": name})
 }
 
 func handleGetDevices(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +138,8 @@ func handlePlayRadio(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 400, "url required")
 		return
 	}
-	// Use LMS when device has MAC (Audio Zone enabled) — avoids binary/LMS conflict
+	id := mux.Vars(r)["id"]
+	// Use LMS when device has MAC (Audio Zone enabled)
 	if d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
@@ -146,6 +149,7 @@ func handlePlayRadio(w http.ResponseWriter, r *http.Request) {
 				jsonErr(w, 502, err.Error())
 				return
 			}
+			store.SetLastStream(id, req.URL, req.Name)
 			jsonOK(w, map[string]string{"status": "playing"})
 			return
 		}
@@ -155,6 +159,7 @@ func handlePlayRadio(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 502, err.Error())
 		return
 	}
+	store.SetLastStream(id, req.URL, req.Name)
 	jsonOK(w, map[string]string{"status": "playing"})
 }
 

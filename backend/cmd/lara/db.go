@@ -18,11 +18,13 @@ type Device struct {
 	MAC  string `json:"mac"`
 }
 
-// Store manages devices in SQLite + mute state in memory
+// Store manages devices in SQLite + runtime state in memory
 type Store struct {
 	db         *sql.DB
 	mu         sync.RWMutex
-	muteVolume map[string]int // device id → volume before mute
+	muteVolume map[string]int    // device id → volume before mute
+	lastStream map[string]string // device id → last played stream URL
+	lastName   map[string]string // device id → last played station name
 }
 
 var store *Store
@@ -46,7 +48,12 @@ func initStore() error {
 	`); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	store = &Store{db: db, muteVolume: make(map[string]int)}
+	store = &Store{
+		db:         db,
+		muteVolume: make(map[string]int),
+		lastStream: make(map[string]string),
+		lastName:   make(map[string]string),
+	}
 	return nil
 }
 
@@ -79,6 +86,27 @@ func (s *Store) CreateDevice(name, ip, mac string) (Device, error) {
 	}
 	id, _ := res.LastInsertId()
 	return Device{ID: int(id), Name: name, IP: ip, MAC: mac}, nil
+}
+
+func (s *Store) SetLastStream(id, url, name string) {
+	s.mu.Lock()
+	s.lastStream[id] = url
+	s.lastName[id] = name
+	s.mu.Unlock()
+}
+
+func (s *Store) GetLastStream(id string) (string, string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	url := s.lastStream[id]
+	if url == "" {
+		url = "http://icecast3.play.cz/impuls128.mp3" // default
+	}
+	name := s.lastName[id]
+	if name == "" {
+		name = "Impuls"
+	}
+	return url, name
 }
 
 func (s *Store) SetMuteVolume(id string, vol int) {
