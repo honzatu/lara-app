@@ -3,7 +3,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -73,20 +72,8 @@ func lara(ip string) *protocol.Client {
 	return protocol.NewClient(ip, os.Getenv("LARA_PASS"))
 }
 
-// backendHost returns the NAS IP:port for local proxy URLs
-func backendHost() string {
-	host := os.Getenv("BACKEND_HOST")
-	if host == "" {
-		host = "192.168.1.3"
-	}
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8400"
-	}
-	return fmt.Sprintf("%s:%s", host, port)
-}
-
-// handlePlay resumes or starts last known stream via local proxy
+// handlePlay resumes or starts last known stream directly via LMS
+// LMS Docker has DNS (8.8.8.8) so it can resolve stream hostnames
 func handlePlay(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 	d, ok := store.DeviceByID(id)
@@ -94,19 +81,17 @@ func handlePlay(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 404, "not found")
 		return
 	}
-	externalURL, name := store.GetLastStream(id)
-	// Use local proxy so LARA can always reach stream (avoids DNS issues)
-	proxyURL := fmt.Sprintf("http://%s/stream/radio?url=%s", backendHost(), externalURL)
+	streamURL, name := store.GetLastStream(id)
 	if d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()
-			c.PlayURL(d.MAC, proxyURL)
+			c.PlayURL(d.MAC, streamURL)
 		}
 	} else {
-		lara(d.IP).LaraPlayStream(proxyURL, name)
+		lara(d.IP).LaraPlayStream(streamURL, name)
 	}
-	jsonOK(w, map[string]string{"status": "playing", "url": proxyURL, "name": name})
+	jsonOK(w, map[string]string{"status": "playing", "url": streamURL, "name": name})
 }
 
 func handleGetDevices(w http.ResponseWriter, r *http.Request) {
@@ -199,9 +184,8 @@ func handlePlayRadio(w http.ResponseWriter, r *http.Request) {
 		if err := c.Connect(); err == nil {
 			defer c.Close()
 			// Proxy via local backend so LARA can reach the stream
-			proxyURL := fmt.Sprintf("http://%s/stream/radio?url=%s", backendHost(), req.URL)
 			c.SetVolume(d.MAC, 60)
-			if err := c.PlayURL(d.MAC, proxyURL); err != nil {
+			if err := c.PlayURL(d.MAC, req.URL); err != nil {
 				jsonErr(w, 502, err.Error())
 				return
 			}
@@ -210,9 +194,8 @@ func handlePlayRadio(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Fallback: binary protocol — also proxy
-	proxyURL := fmt.Sprintf("http://%s/stream/radio?url=%s", backendHost(), req.URL)
-	if err := lara(d.IP).LaraPlayStream(proxyURL, req.Name); err != nil {
+	// Fallback: binary protocol
+	if err := lara(d.IP).LaraPlayStream(req.URL, req.Name); err != nil {
 		jsonErr(w, 502, err.Error())
 		return
 	}

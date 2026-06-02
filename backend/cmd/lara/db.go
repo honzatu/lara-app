@@ -100,11 +100,12 @@ func (s *Store) GetLastStream(id string) (string, string) {
 	defer s.mu.RUnlock()
 	url := s.lastStream[id]
 	if url == "" {
-		url = "http://icecast3.play.cz/impuls128.mp3" // default
+		// TuneIn URL s LARA serial — jediný formát co LARA přehraje
+		url = "http://opml.radiotime.com/Tune.ashx?id=s24967&formats=aac,ogg,mp3,wma,wmvoice&partnerId=16&serial=ae0171dcf1f0ac4c6a9b1d854821422f&filter=s:popular"
 	}
 	name := s.lastName[id]
 	if name == "" {
-		name = "Impuls"
+		name = "Frekvence 1"
 	}
 	return url, name
 }
