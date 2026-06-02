@@ -40,14 +40,6 @@ func main() {
 		})
 	}
 	r.Use(cors)
-	// Handle OPTIONS preflight for all routes
-	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if req.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		http.NotFound(w, req)
-	}).Methods(http.MethodOptions)
 
 	// Health check
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +60,9 @@ func main() {
 	api.HandleFunc("/devices/{id}/skip", handleSkip).Methods("POST")
 	api.HandleFunc("/devices/{id}/prev", handlePrev).Methods("POST")
 	api.HandleFunc("/devices/{id}/mute", handleMute).Methods("POST")
+
+	// Radio stream proxy — LARA fetches this locally, we proxy to internet
+	r.HandleFunc("/stream/radio", handleStreamRadio).Methods("GET")
 
 	// WebSocket
 	r.HandleFunc("/ws", handleWebSocket)
