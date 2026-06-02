@@ -26,21 +26,6 @@ func main() {
 
 	r := mux.NewRouter()
 
-	// CORS — allow all origins (local network app)
-	cors := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			if req.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			next.ServeHTTP(w, req)
-		})
-	}
-	r.Use(cors)
-
 	// Health check
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -67,8 +52,21 @@ func main() {
 	// WebSocket
 	r.HandleFunc("/ws", handleWebSocket)
 
+	// CORS wrapper — must wrap the entire mux, not use r.Use()
+	// gorilla/mux r.Use() skips middleware for unmatched routes (OPTIONS returns 404)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if req.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		r.ServeHTTP(w, req)
+	})
+
 	log.Printf("[LARA] Starting on :%s", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		log.Fatal(err)
 	}
 }
