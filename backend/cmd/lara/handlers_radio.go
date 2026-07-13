@@ -104,7 +104,7 @@ func handleSyncFavorites(w http.ResponseWriter, r *http.Request) {
 	for _, f := range favs {
 		streams = append(streams, protocol.NamedStream{
 			Name: smartTruncateName(f.Name),
-			URL:  f.URL,
+			URL:  deviceStreamURL(f.URL), // https/long URLs go through the /s proxy
 		})
 	}
 	synced, err := lara(d.IP).SyncStations(streams)

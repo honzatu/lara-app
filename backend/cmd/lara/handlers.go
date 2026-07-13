@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -42,16 +43,11 @@ func resolveStreamURL(rawURL string) (string, error) {
 	return resolved, nil
 }
 
-// handleStreamRadio proxies an internet radio stream for the browser audio analyzer.
-// Resolves M3U playlists automatically so Web Audio API gets a raw audio stream.
-func handleStreamRadio(w http.ResponseWriter, r *http.Request) {
-	streamURL := r.URL.Query().Get("url")
-	if streamURL == "" {
-		http.Error(w, "missing url", http.StatusBadRequest)
-		return
-	}
-
-	// Resolve M3U → actual stream URL
+// proxyStream fetches a stream URL (resolving M3U playlists first) and pipes
+// the audio to the client. withICY requests inline ICY metadata — wanted by
+// the browser audio analyzer, but NEVER for the LARA (metadata bytes would
+// corrupt plain MP3 playback).
+func proxyStream(w http.ResponseWriter, streamURL string, withICY bool) {
 	resolved, err := resolveStreamURL(streamURL)
 	if err != nil {
 		http.Error(w, "resolve error: "+err.Error(), http.StatusBadGateway)
@@ -64,7 +60,9 @@ func handleStreamRadio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("User-Agent", "LARA-App/1.0")
-	req.Header.Set("Icy-MetaData", "1")
+	if withICY {
+		req.Header.Set("Icy-MetaData", "1")
+	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -82,6 +80,47 @@ func handleStreamRadio(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	io.Copy(w, resp.Body)
+}
+
+// handleStreamRadio proxies an internet radio stream for the browser audio analyzer.
+func handleStreamRadio(w http.ResponseWriter, r *http.Request) {
+	streamURL := r.URL.Query().Get("url")
+	if streamURL == "" {
+		http.Error(w, "missing url", http.StatusBadRequest)
+		return
+	}
+	proxyStream(w, streamURL, true)
+}
+
+// handleShortStream serves /s?k=<token> — the LARA-facing stream proxy.
+// The LARA can only fetch short plain-HTTP URLs (station slot fits 69 chars,
+// no TLS), so https/long stream URLs are aliased to short tokens and fetched
+// through here.
+func handleShortStream(w http.ResponseWriter, r *http.Request) {
+	streamURL, ok := store.URLForToken(r.URL.Query().Get("k"))
+	if !ok {
+		http.Error(w, "unknown stream token", http.StatusNotFound)
+		return
+	}
+	proxyStream(w, streamURL, false)
+}
+
+// deviceStreamURL returns the URL to write into a LARA station slot.
+// HTTPS and over-long URLs are routed through the backend's /s proxy;
+// this requires LAN_HOST (the docker host's LAN IP) to be configured.
+func deviceStreamURL(rawURL string) string {
+	if !strings.HasPrefix(rawURL, "https://") && len(rawURL) < 80 {
+		return rawURL
+	}
+	host := os.Getenv("LAN_HOST")
+	if host == "" {
+		return rawURL // not configured — pass through unchanged
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8400"
+	}
+	return "http://" + host + ":" + port + "/s?k=" + store.AliasURL(rawURL)
 }
 
 func lmsClient() *lms.Client {
@@ -135,7 +174,8 @@ func handlePlay(w http.ResponseWriter, r *http.Request) {
 	}
 	// Fallback: binary protocol
 	streamURL, name := store.GetLastStream(id)
-	lara(d.IP).LaraPlayStream(streamURL, name)
+	lara(d.IP).LaraPlayStream(deviceStreamURL(streamURL), name)
+	store.SetPlaying(id, true)
 	jsonOK(w, map[string]string{"status": "playing", "url": streamURL, "name": name})
 }
 
@@ -169,6 +209,14 @@ func handleGetDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, d)
+}
+
+func handleDeleteDevice(w http.ResponseWriter, r *http.Request) {
+	if err := store.DeleteDevice(mux.Vars(r)["id"]); err != nil {
+		jsonErr(w, 500, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"status": "ok"})
 }
 
 func handleDeviceStatus(w http.ResponseWriter, r *http.Request) {
@@ -214,16 +262,19 @@ func handleDeviceStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	// Fallback: binary protocol status
-	status, err := lara(d.IP).GetStatus()
+	// Fallback: TCP reachability + last commanded state. The LARA "status"
+	// packet is the PLAY command — polling it would start playback on a
+	// stopped device, so we never query the device here.
+	conn, err := net.DialTimeout("tcp", d.IP+":80", 1500*time.Millisecond)
 	if err != nil {
-		jsonErr(w, 502, err.Error())
+		jsonErr(w, 503, "lara unreachable")
 		return
 	}
+	conn.Close()
 	_, storedName := store.GetLastStream(id)
 	jsonOK(w, map[string]any{
-		"playing":      status.Playing,
-		"volume":       status.Volume,
+		"playing":      store.IsPlaying(id),
+		"volume":       store.GetVolume(id),
 		"station_name": storedName,
 		"track_title":  "",
 		"artist":       "",
@@ -267,11 +318,12 @@ func handlePlayRadio(w http.ResponseWriter, r *http.Request) {
 	if req.Position != nil {
 		position = *req.Position
 	}
-	if err := lara(d.IP).PlayRadioAt(req.URL, smartTruncateName(req.Name), position); err != nil {
+	if err := lara(d.IP).PlayRadioAt(deviceStreamURL(req.URL), smartTruncateName(req.Name), position); err != nil {
 		jsonErr(w, 502, err.Error())
 		return
 	}
 	store.SetLastStream(id, req.URL, req.Name)
+	store.SetPlaying(id, true)
 	jsonOK(w, map[string]string{"status": "playing"})
 }
 
@@ -290,6 +342,7 @@ func handlePause(w http.ResponseWriter, r *http.Request) {
 	}
 	// Binary stop silences LARA hardware
 	lara(d.IP).Stop()
+	store.SetPlaying(mux.Vars(r)["id"], false)
 	jsonOK(w, map[string]string{"status": "paused"})
 }
 
@@ -310,6 +363,7 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 	}
 	// Binary STOP as well for hardware silence fallback
 	lara(d.IP).Stop()
+	store.SetPlaying(mux.Vars(r)["id"], false)
 	jsonOK(w, map[string]string{"status": "stopped"})
 }
 
@@ -338,6 +392,7 @@ func handleVolume(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 502, err.Error())
 		return
 	}
+	store.SetVolume(mux.Vars(r)["id"], req.Volume)
 	jsonOK(w, map[string]int{"volume": req.Volume})
 }
 
@@ -400,21 +455,27 @@ func handleMute(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 404, "not found")
 		return
 	}
+	// Use tracked volume — querying the device would send a PLAY packet
+	// (the protocol has no read-only status) and start playback when muted.
 	c := lara(d.IP)
-	status, err := c.GetStatus()
-	if err != nil {
-		jsonErr(w, 502, err.Error())
-		return
-	}
-	if status.Volume > 0 {
-		store.SetMuteVolume(id, status.Volume)
-		c.SetVolume(0)
+	current := store.GetVolume(id)
+	if current > 0 {
+		store.SetMuteVolume(id, current)
+		if err := c.SetVolume(0); err != nil {
+			jsonErr(w, 502, err.Error())
+			return
+		}
+		store.SetVolume(id, 0)
 	} else {
 		prev := store.GetMuteVolume(id)
 		if prev == 0 {
 			prev = 50
 		}
-		c.SetVolume(prev)
+		if err := c.SetVolume(prev); err != nil {
+			jsonErr(w, 502, err.Error())
+			return
+		}
+		store.SetVolume(id, prev)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }

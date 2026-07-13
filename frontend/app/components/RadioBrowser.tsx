@@ -3,7 +3,7 @@
 // with physical-slot sync, and YouTube Music search via the music bridge.
 import { useState, useEffect, useCallback } from "react";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8400";
+const API = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface RadioStation {
   name: string;

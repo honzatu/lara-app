@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import LaraPanel from "./components/LaraPanel";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8400";
+const API = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface Device {
   id: number;

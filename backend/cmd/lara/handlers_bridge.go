@@ -30,10 +30,20 @@ func bridgeInternalURL() string {
 }
 
 // bridgeLanURL — bridge address reachable from the physical LARA device.
-// LARA lives on your LAN, outside the docker network, so this must be the
-// docker host's LAN IP, e.g. http://192.168.1.10:8282 — set BRIDGE_LAN_URL.
+// LARA lives on your LAN, outside the docker network. Derived from LAN_HOST
+// (the docker host's LAN IP) + BRIDGE_PORT; BRIDGE_LAN_URL overrides both.
 func bridgeLanURL() string {
-	return strings.TrimRight(os.Getenv("BRIDGE_LAN_URL"), "/")
+	if v := os.Getenv("BRIDGE_LAN_URL"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	if host := os.Getenv("LAN_HOST"); host != "" {
+		port := os.Getenv("BRIDGE_PORT")
+		if port == "" {
+			port = "8282"
+		}
+		return "http://" + host + ":" + port
+	}
+	return ""
 }
 
 // Active bridge sessions per device (device id → bridge session UUID)
@@ -94,7 +104,7 @@ func handlePlayBridge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if bridgeLanURL() == "" {
-		jsonErr(w, 500, "BRIDGE_LAN_URL is not set — LARA cannot reach the bridge without it (see .env.example)")
+		jsonErr(w, 500, "LAN_HOST is not set — the LARA cannot reach the bridge without it (see .env.example)")
 		return
 	}
 
@@ -180,6 +190,7 @@ func handlePlayBridge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	store.SetLastStream(id, streamURL, title)
+	store.SetPlaying(id, true)
 	jsonOK(w, map[string]any{
 		"status":    "playing",
 		"sessionId": sessionData.SessionID,

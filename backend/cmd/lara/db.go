@@ -2,7 +2,9 @@
 package main
 
 import (
+	"crypto/sha1"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"sync"
@@ -22,7 +24,9 @@ type Device struct {
 type Store struct {
 	db         *sql.DB
 	mu         sync.RWMutex
-	muteVolume map[string]int // device id → volume before mute
+	muteVolume map[string]int  // device id → volume before mute
+	playing    map[string]bool // device id → last commanded play state
+	volume     map[string]int  // device id → last commanded volume
 }
 
 var store *Store
@@ -62,11 +66,55 @@ func initStore() error {
 	`); err != nil {
 		return fmt.Errorf("migrate favorites: %w", err)
 	}
+	// Short stable tokens for stream URLs the LARA can't fetch directly
+	// (https or longer than the 69-char slot field) — see /s endpoint.
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS stream_aliases (
+			token TEXT PRIMARY KEY,
+			url   TEXT NOT NULL
+		)
+	`); err != nil {
+		return fmt.Errorf("migrate stream_aliases: %w", err)
+	}
 	store = &Store{
 		db:         db,
 		muteVolume: make(map[string]int),
+		playing:    make(map[string]bool),
+		volume:     make(map[string]int),
 	}
 	return nil
+}
+
+// SetPlaying / IsPlaying track the last commanded play state per device.
+// The LARA binary protocol has no read-only status query — its "status"
+// packet is the PLAY command, which would start playback on a stopped
+// device. So status polling must never touch the device; we report the
+// last state we commanded instead.
+func (s *Store) SetPlaying(id string, playing bool) {
+	s.mu.Lock()
+	s.playing[id] = playing
+	s.mu.Unlock()
+}
+
+func (s *Store) IsPlaying(id string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.playing[id]
+}
+
+func (s *Store) SetVolume(id string, vol int) {
+	s.mu.Lock()
+	s.volume[id] = vol
+	s.mu.Unlock()
+}
+
+func (s *Store) GetVolume(id string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if v, ok := s.volume[id]; ok {
+		return v
+	}
+	return 50
 }
 
 func (s *Store) AllDevices() []Device {
@@ -113,7 +161,7 @@ func (s *Store) GetLastStream(id string) (string, string) {
 		"SELECT last_stream_url, last_stream_name FROM devices WHERE id=?", id,
 	).Scan(&url, &name)
 	if url == "" {
-		url = "http://icecast.rozhlas.cz/radiozurnal_mp3_128.mp3"
+		url = "http://rozhlas.stream/radiozurnal_mp3_128.mp3"
 	}
 	if name == "" {
 		name = "Radiozurnal"
@@ -155,6 +203,27 @@ func (s *Store) AddFavorite(name, url string) (Favorite, error) {
 func (s *Store) DeleteFavorite(id string) error {
 	_, err := s.db.Exec("DELETE FROM favorites WHERE id = ?", id)
 	return err
+}
+
+func (s *Store) DeleteDevice(id string) error {
+	_, err := s.db.Exec("DELETE FROM devices WHERE id = ?", id)
+	return err
+}
+
+// AliasURL returns a short, stable token for a stream URL, creating the
+// mapping if it doesn't exist yet. Deterministic (sha1 prefix), so synced
+// LARA slots keep working across restarts and re-syncs.
+func (s *Store) AliasURL(url string) string {
+	h := sha1.Sum([]byte(url))
+	token := hex.EncodeToString(h[:])[:12]
+	s.db.Exec("INSERT OR IGNORE INTO stream_aliases (token, url) VALUES (?, ?)", token, url)
+	return token
+}
+
+func (s *Store) URLForToken(token string) (string, bool) {
+	var url string
+	err := s.db.QueryRow("SELECT url FROM stream_aliases WHERE token = ?", token).Scan(&url)
+	return url, err == nil
 }
 
 func (s *Store) SetMuteVolume(id string, vol int) {

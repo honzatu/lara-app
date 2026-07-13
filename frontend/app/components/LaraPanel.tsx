@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from "react";
 import LaraDisplay from "./LaraDisplay";
 import RadioBrowser from "./RadioBrowser";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8400";
+const API = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface Props {
   deviceId: number;

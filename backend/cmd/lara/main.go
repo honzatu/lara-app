@@ -38,6 +38,7 @@ func main() {
 	api.HandleFunc("/devices", handleGetDevices).Methods("GET")
 	api.HandleFunc("/devices", handleCreateDevice).Methods("POST")
 	api.HandleFunc("/devices/{id}", handleGetDevice).Methods("GET")
+	api.HandleFunc("/devices/{id}", handleDeleteDevice).Methods("DELETE")
 	api.HandleFunc("/devices/{id}/status", handleDeviceStatus).Methods("GET")
 	api.HandleFunc("/devices/{id}/play", handlePlay).Methods("POST")
 	api.HandleFunc("/devices/{id}/play-radio", handlePlayRadio).Methods("POST")
@@ -63,6 +64,8 @@ func main() {
 
 	// Radio stream proxy — LARA fetches this locally, we proxy to internet
 	r.HandleFunc("/stream/radio", handleStreamRadio).Methods("GET")
+	// Short LARA-facing proxy for https/long stream URLs (see deviceStreamURL)
+	r.HandleFunc("/s", handleShortStream).Methods("GET")
 
 	// WebSocket
 	r.HandleFunc("/ws", handleWebSocket)

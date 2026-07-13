@@ -35,7 +35,7 @@ export default function LaraDisplay({ state, deviceName }: Props) {
   const [eqBars, setEqBars] = useState<number[]>(new Array(16).fill(0));
 
   useEffect(() => {
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.3:8400";
+    const API = process.env.NEXT_PUBLIC_API_URL || "";
     if (!state.playing || !state.streamUrl) {
       // Stop analyzer
       cancelAnimationFrame(rafRef.current);

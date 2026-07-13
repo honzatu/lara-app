@@ -6,6 +6,11 @@ services:
     ports:
       - "8400:8400"
     env_file: .env
+    environment:
+      # Force Go's pure resolver — the musl/cgo resolver fails against
+      # Docker's embedded DNS on some hosts (Synology NAS in particular),
+      # which broke outbound stream/API lookups with "no such host".
+      - GODEBUG=netdns=go
     volumes:
       - backend-data:/data
     depends_on:
@@ -20,15 +25,22 @@ services:
     container_name: lara-bridge
     restart: unless-stopped
     ports:
-      - "8282:8282"
+      # Host port is configurable (BRIDGE_PORT) in case 8282 is taken;
+      # keep BRIDGE_LAN_URL in .env consistent with it.
+      - "${BRIDGE_PORT:-8282}:8282"
     # volumes:
     #   - ./bridge/headers.txt:/app/headers.txt:ro
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Leave empty (default) to use same-origin /api via nginx — works
+        # from any machine on your network with zero configuration.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
     container_name: lara-frontend
     restart: unless-stopped
-    env_file: .env
     depends_on:
       - backend
 
