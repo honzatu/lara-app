@@ -51,9 +51,15 @@ func main() {
 
 	// Radio station search + favorites
 	api.HandleFunc("/radio/search", handleRadioSearch).Methods("GET")
+	api.HandleFunc("/radio/now-playing", handleNowPlaying).Methods("GET")
 	api.HandleFunc("/favorites", handleGetFavorites).Methods("GET")
 	api.HandleFunc("/favorites", handleAddFavorite).Methods("POST")
 	api.HandleFunc("/favorites/{id}", handleDeleteFavorite).Methods("DELETE")
+
+	// YouTube Music via bridge (optional — requires the bridge container)
+	api.PathPrefix("/music/").HandlerFunc(handleMusicProxy).Methods("GET")
+	api.HandleFunc("/devices/{id}/play-bridge", handlePlayBridge).Methods("POST")
+	api.HandleFunc("/devices/{id}/session/{action}", handleBridgeSession).Methods("GET", "POST")
 
 	// Radio stream proxy — LARA fetches this locally, we proxy to internet
 	r.HandleFunc("/stream/radio", handleStreamRadio).Methods("GET")

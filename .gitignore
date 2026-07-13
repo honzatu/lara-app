@@ -36,6 +36,15 @@ go.work.sum
 .env.local
 *.env
 
+# YouTube Music credentials — these are Google session cookies, treat as passwords
+bridge/headers.txt
+bridge/browser.json
+headers.txt
+browser.json
+
+# Local tooling config
+.claudecode.json
+
 # Python
 __pycache__/
 *.pyc

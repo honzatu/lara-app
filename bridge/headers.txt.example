@@ -1,0 +1,21 @@
+# OPTIONAL: YouTube Music authentication headers
+#
+# The bridge works WITHOUT this file (anonymous mode) — search and playback
+# of freely available tracks work out of the box. Adding your own headers
+# enables your personal playlists, library and (with Premium) higher quality.
+#
+# HOW TO CREATE headers.txt:
+#   1. Open https://music.youtube.com in your browser and log in.
+#   2. Open DevTools (F12) → Network tab.
+#   3. Click any request to music.youtube.com (e.g. "browse").
+#   4. Copy the REQUEST headers (raw) — the block containing "cookie: ..."
+#   5. Paste them into a file named headers.txt in this directory.
+#   6. Uncomment the headers.txt volume mount in docker-compose.yml.
+#
+# Details: https://ytmusicapi.readthedocs.io/en/stable/setup/browser.html
+#
+# ⚠️  SECURITY WARNING:
+#   headers.txt contains your Google session cookies. Treat it like a password:
+#   - NEVER commit it to git (it is in .gitignore — keep it there)
+#   - NEVER share it or paste it into issues/screenshots
+#   - Anyone with this file can access your Google account session

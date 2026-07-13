@@ -1,21 +1,4 @@
-version: "3.9"
-
 services:
-  lms:
-    image: jboesl/logitechmediaserver
-    container_name: lara-lms
-    network_mode: host
-    restart: unless-stopped
-    environment:
-      - TZ=Europe/Prague
-    volumes:
-      - lms-config:/var/lib/squeezeboxserver
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9001/status.html"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
   backend:
     build: ./backend
     container_name: lara-backend
@@ -23,27 +6,23 @@ services:
     ports:
       - "8400:8400"
     env_file: .env
-    environment:
-      - LMS_HOST=host-gateway
-      - LMS_PORT=9001
-      - LMS_CLI_PORT=9090
-    extra_hosts:
-      - "host-gateway:host-gateway"
     volumes:
       - backend-data:/data
     depends_on:
-      lms:
-        condition: service_healthy
+      - bridge
 
+  # Music bridge — YouTube Music / yt-dlp → MP3 stream LARA can play.
+  # Works anonymously out of the box. For your own playlists/Premium,
+  # create bridge/headers.txt (see bridge/headers.txt.example) and
+  # uncomment the volume mount below.
   bridge:
     build: ./bridge
     container_name: lara-bridge
     restart: unless-stopped
     ports:
       - "8282:8282"
-    env_file: .env
-    volumes:
-      - bridge-cache:/cache
+    # volumes:
+    #   - ./bridge/headers.txt:/app/headers.txt:ro
 
   frontend:
     build: ./frontend
@@ -65,7 +44,25 @@ services:
       - backend
       - frontend
 
+  # OPTIONAL: Logitech Media Server — only needed if you want to use LARA
+  # in Squeezebox "Audio Zone" mode instead of the direct binary protocol.
+  # Start with: docker compose --profile lms up -d
+  lms:
+    image: jboesl/logitechmediaserver
+    container_name: lara-lms
+    profiles: ["lms"]
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Prague
+    volumes:
+      - lms-config:/var/lib/squeezeboxserver
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9001/status.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   lms-config:
   backend-data:
-  bridge-cache:
