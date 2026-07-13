@@ -4,6 +4,10 @@
 
 The [LARA](https://www.elkoep.com/audiovideo-lara) is a lovely piece of Czech wall-mounted hardware with one problem: its firmware is stuck in the past. No HTTPS streams, no station search, no streaming services — just 40 station slots you edit in a clunky web form. This project fixes that. It runs on any always-on box on your LAN (NAS, Raspberry Pi, home server) and turns the LARA into a device you can actually enjoy.
 
+<p align="center">
+  <img src="docs/screenshot.svg" alt="lara-app web panel — a LARA playing Evropa 2, with the on-screen spectrum and LIVE indicator" width="360">
+</p>
+
 > ⭐ **If this project is useful to you, please star the repo** — it genuinely helps others find it and keeps the motivation up. Thank you!
 
 ## Features
