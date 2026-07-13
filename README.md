@@ -100,15 +100,17 @@ Works **anonymously out of the box** — search and play need no account. To use
 
 YouTube playback uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) under the hood. Use it for personal listening in your own home; respect YouTube's Terms of Service in your jurisdiction.
 
-### Optional: Squeezebox mode (LMS)
+### Optional: Squeezebox / LMS mode (off by default)
 
-The LARA can also act as a Squeezebox player ("Audio Zone" mode). If you prefer that route — e.g. for multi-room sync via [Lyrion Music Server](https://lyrion.org/) — start the optional LMS container and set your device's MAC in the app:
+By default lara-app controls the LARA entirely through its **direct binary protocol** — no LMS, no extra services, nothing to configure on the device. This is the recommended way and what everything above assumes.
+
+The LARA can *also* act as a Squeezebox player ("Audio Zone" mode) if you specifically want that — e.g. to slot it into an existing [Lyrion Music Server](https://lyrion.org/) / Home Assistant multi-room setup. It is entirely opt-in: set `ENABLE_LMS=true` in `.env`, give your device its MAC address, and start the optional container:
 
 ```bash
 docker compose --profile lms up -d
 ```
 
-The direct binary protocol (default) needs no LMS and no configuration on the device itself.
+With `ENABLE_LMS` unset or `false`, none of the LMS code path runs — the binary protocol is used for every command.
 
 ## API
 

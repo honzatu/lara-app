@@ -123,6 +123,15 @@ func deviceStreamURL(rawURL string) string {
 	return "http://" + host + ":" + port + "/s?k=" + store.AliasURL(rawURL)
 }
 
+// lmsEnabled reports whether the optional Squeezebox / LMS integration is
+// turned on. It is OFF by default: the direct binary protocol is the primary
+// (and recommended) way to control LARA. Set ENABLE_LMS=true only if you run
+// the optional LMS container and want Audio Zone / multi-room mode.
+func lmsEnabled() bool {
+	v := os.Getenv("ENABLE_LMS")
+	return v == "true" || v == "1"
+}
+
 func lmsClient() *lms.Client {
 	host := os.Getenv("LMS_HOST")
 	if host == "" { host = "localhost" }
@@ -155,7 +164,7 @@ func handlePlay(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 404, "not found")
 		return
 	}
-	if d.MAC != "" {
+	if lmsEnabled() && d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()
@@ -174,7 +183,10 @@ func handlePlay(w http.ResponseWriter, r *http.Request) {
 	}
 	// Fallback: binary protocol
 	streamURL, name := store.GetLastStream(id)
-	lara(d.IP).LaraPlayStream(deviceStreamURL(streamURL), name)
+	if err := lara(d.IP).LaraPlayStream(deviceStreamURL(streamURL), name); err != nil {
+		jsonErr(w, 502, err.Error())
+		return
+	}
 	store.SetPlaying(id, true)
 	jsonOK(w, map[string]string{"status": "playing", "url": streamURL, "name": name})
 }
@@ -227,7 +239,7 @@ func handleDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Use LMS status when device has MAC — more accurate for Audio Zone mode
-	if d.MAC != "" {
+	if lmsEnabled() && d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()
@@ -300,7 +312,7 @@ func handlePlayRadio(w http.ResponseWriter, r *http.Request) {
 	}
 	id := mux.Vars(r)["id"]
 	// Use LMS when device has MAC (Audio Zone enabled)
-	if d.MAC != "" {
+	if lmsEnabled() && d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()
@@ -333,7 +345,7 @@ func handlePause(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 404, "not found")
 		return
 	}
-	if d.MAC != "" {
+	if lmsEnabled() && d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()
@@ -354,7 +366,7 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 	}
 	// Stop LMS first — this actually stops the Squeezebox stream to LARA.
 	// Binary STOP alone is not enough: LMS keeps pushing audio via Squeezebox protocol.
-	if d.MAC != "" {
+	if lmsEnabled() && d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()
@@ -381,7 +393,7 @@ func handleVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Sync volume to LMS so status polling returns the new value (not the old one)
-	if d.MAC != "" {
+	if lmsEnabled() && d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()
@@ -402,7 +414,7 @@ func handleSkip(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 404, "not found")
 		return
 	}
-	if d.MAC != "" {
+	if lmsEnabled() && d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()
@@ -428,7 +440,7 @@ func handlePrev(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 404, "not found")
 		return
 	}
-	if d.MAC != "" {
+	if lmsEnabled() && d.MAC != "" {
 		c := lmsClient()
 		if err := c.Connect(); err == nil {
 			defer c.Close()

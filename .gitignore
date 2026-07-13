@@ -42,8 +42,10 @@ bridge/browser.json
 headers.txt
 browser.json
 
-# Local tooling config
-.claudecode.json
+# Local editor / tooling config
+.vscode/
+.idea/
+*.local.json
 
 # Python
 __pycache__/
