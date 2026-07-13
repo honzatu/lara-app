@@ -54,3 +54,13 @@ frontend/out/
 # Docker local overrides
 docker-compose.local.yml
 docker/lms-config/
+
+# Synology NAS metadata
+@eaDir/
+@eaDir
+*.SynoEAStream
+@tmp/
+
+# Compiled binaries
+backend/lara
+backend/bin/
