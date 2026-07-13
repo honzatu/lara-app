@@ -7,8 +7,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from "react";
 import LaraDisplay from "./LaraDisplay";
+import RadioBrowser from "./RadioBrowser";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.3:8400";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8400";
 
 interface Props {
   deviceId: number;
@@ -43,6 +44,7 @@ export default function LaraPanel({ deviceId, deviceName }: Props) {
   });
 
   const [loading, setLoading] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
 
   // Poll status every 3s — updates playing state and track title from LMS
   useEffect(() => {
@@ -145,7 +147,7 @@ export default function LaraPanel({ deviceId, deviceName }: Props) {
           <button className="lara-btn" onClick={onMute} title="Mute"><MuteIcon muted={state.muted} /></button>
           <button className="lara-btn" onClick={onStop} title="Stop"><PowerIcon /></button>
           <button className="lara-btn" onClick={onPlayPause} title={state.playing ? "Pause" : "Play"} disabled={loading}><PlayPauseIcon playing={state.playing} /></button>
-          <button className="lara-btn" title="Settings"><SettingsIcon /></button>
+          <button className="lara-btn" onClick={() => setBrowserOpen(true)} title="Browse stations & music"><SettingsIcon /></button>
         </div>
 
         {/* OLED Display — minWidth:0 prevents nowrap text from pushing flex width */}
@@ -168,6 +170,14 @@ export default function LaraPanel({ deviceId, deviceName }: Props) {
         <button className="lara-btn" onClick={onNext} title="Next"><NextIcon /></button>
         <div style={{ width: 8, height: 8, borderRadius: "50%", background: state.playing ? "#4ade80" : "#888", boxShadow: state.playing ? "0 0 6px #4ade80" : "none" }} />
       </div>
+
+      {browserOpen && (
+        <RadioBrowser
+          deviceId={deviceId}
+          onClose={() => setBrowserOpen(false)}
+          onPlayed={name => setState(p => ({ ...p, playing: true, stationName: name, trackTitle: "", artist: "" }))}
+        />
+      )}
     </div>
   );
 }
