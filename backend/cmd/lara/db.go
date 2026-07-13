@@ -53,6 +53,15 @@ func initStore() error {
 	`); err != nil {
 		// Columns already exist — ignore
 	}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS favorites (
+			id   INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			url  TEXT NOT NULL UNIQUE
+		)
+	`); err != nil {
+		return fmt.Errorf("migrate favorites: %w", err)
+	}
 	store = &Store{
 		db:         db,
 		muteVolume: make(map[string]int),
@@ -104,12 +113,48 @@ func (s *Store) GetLastStream(id string) (string, string) {
 		"SELECT last_stream_url, last_stream_name FROM devices WHERE id=?", id,
 	).Scan(&url, &name)
 	if url == "" {
-		url = "http://opml.radiotime.com/Tune.ashx?id=s24967&formats=aac,ogg,mp3,wma,wmvoice&partnerId=16&serial=ae0171dcf1f0ac4c6a9b1d854821422f&filter=s:popular"
+		url = "http://icecast.rozhlas.cz/radiozurnal_mp3_128.mp3"
 	}
 	if name == "" {
-		name = "Frekvence 1"
+		name = "Radiozurnal"
 	}
 	return url, name
+}
+
+// Favorite is a saved radio station
+type Favorite struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+func (s *Store) AllFavorites() []Favorite {
+	rows, err := s.db.Query("SELECT id, name, url FROM favorites ORDER BY name COLLATE NOCASE")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var favs []Favorite
+	for rows.Next() {
+		var f Favorite
+		rows.Scan(&f.ID, &f.Name, &f.URL)
+		favs = append(favs, f)
+	}
+	return favs
+}
+
+func (s *Store) AddFavorite(name, url string) (Favorite, error) {
+	res, err := s.db.Exec("INSERT INTO favorites (name, url) VALUES (?, ?)", name, url)
+	if err != nil {
+		return Favorite{}, err
+	}
+	id, _ := res.LastInsertId()
+	return Favorite{ID: int(id), Name: name, URL: url}, nil
+}
+
+func (s *Store) DeleteFavorite(id string) error {
+	_, err := s.db.Exec("DELETE FROM favorites WHERE id = ?", id)
+	return err
 }
 
 func (s *Store) SetMuteVolume(id string, vol int) {

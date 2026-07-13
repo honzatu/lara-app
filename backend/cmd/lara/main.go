@@ -33,30 +33,6 @@ func main() {
 		fmt.Fprintf(w, `{"status":"ok","service":"lara-app","version":"0.1.0"}`)
 	}).Methods("GET")
 
-	// Simple test page — plain HTML, no React
-	r.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:20px;background:#222;color:#fff">
-<h2>LARA Test</h2>
-<button id="play" style="padding:16px 32px;font-size:18px;background:#22c55e;color:#fff;border:none;border-radius:8px;cursor:pointer">▶ PLAY</button>
-<button id="stop" style="padding:16px 32px;font-size:18px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer;margin-left:12px">⏹ STOP</button>
-<div id="log" style="margin-top:20px;font-family:monospace;font-size:14px"></div>
-<script>
-function log(msg) { document.getElementById('log').innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + msg + '</div>'; }
-document.getElementById('play').onclick = function() {
-  log('Clicking PLAY...');
-  fetch('/api/v1/devices/1/play', {method:'POST', headers:{'Content-Type':'application/json'}})
-    .then(r => r.json()).then(d => log('OK: ' + JSON.stringify(d))).catch(e => log('ERR: ' + e));
-};
-document.getElementById('stop').onclick = function() {
-  log('Clicking STOP...');
-  fetch('/api/v1/devices/1/stop', {method:'POST', headers:{'Content-Type':'application/json'}})
-    .then(r => r.json()).then(d => log('OK: ' + JSON.stringify(d))).catch(e => log('ERR: ' + e));
-};
-log('Page loaded. Click PLAY to test.');
-</script></body></html>`)
-	}).Methods("GET")
-
 	// API v1
 	api := r.PathPrefix("/api/v1").Subrouter()
 	api.HandleFunc("/devices", handleGetDevices).Methods("GET")
@@ -71,6 +47,13 @@ log('Page loaded. Click PLAY to test.');
 	api.HandleFunc("/devices/{id}/skip", handleSkip).Methods("POST")
 	api.HandleFunc("/devices/{id}/prev", handlePrev).Methods("POST")
 	api.HandleFunc("/devices/{id}/mute", handleMute).Methods("POST")
+	api.HandleFunc("/devices/{id}/sync-favorites", handleSyncFavorites).Methods("POST")
+
+	// Radio station search + favorites
+	api.HandleFunc("/radio/search", handleRadioSearch).Methods("GET")
+	api.HandleFunc("/favorites", handleGetFavorites).Methods("GET")
+	api.HandleFunc("/favorites", handleAddFavorite).Methods("POST")
+	api.HandleFunc("/favorites/{id}", handleDeleteFavorite).Methods("DELETE")
 
 	// Radio stream proxy — LARA fetches this locally, we proxy to internet
 	r.HandleFunc("/stream/radio", handleStreamRadio).Methods("GET")

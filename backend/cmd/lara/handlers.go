@@ -239,8 +239,9 @@ func handlePlayRadio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		URL  string `json:"url"`
-		Name string `json:"name"`
+		URL      string `json:"url"`
+		Name     string `json:"name"`
+		Position *int   `json:"position"` // favorites slot 1–39; omit for new/unknown stations
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
 		jsonErr(w, 400, "url required")
@@ -261,8 +262,12 @@ func handlePlayRadio(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Fallback: binary protocol
-	if err := lara(d.IP).LaraPlayStream(req.URL, req.Name); err != nil {
+	// Binary protocol: write URL to slot 0, keep synced favorites in slots 1+
+	position := -1
+	if req.Position != nil {
+		position = *req.Position
+	}
+	if err := lara(d.IP).PlayRadioAt(req.URL, smartTruncateName(req.Name), position); err != nil {
 		jsonErr(w, 502, err.Error())
 		return
 	}
